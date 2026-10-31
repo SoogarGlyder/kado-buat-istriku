@@ -98,6 +98,10 @@ input[type=range]{width:100%; accent-color:var(--pink); height:34px; margin:8px 
 .tiket.used{opacity:.5; text-decoration:line-through}
 .tiket.used::after{content:" ✓ Dipakai"; display:inline-block; text-decoration:none}
 .tiket:focus-visible{outline:4px solid var(--blue); outline-offset:3px}
+.wheelwrap{position:relative; width:min(280px,80vw); margin:22px auto 14px}
+.wheelwrap::before{content:""; position:absolute; top:-14px; left:50%; transform:translateX(-50%); border-left:13px solid transparent; border-right:13px solid transparent; border-top:26px solid var(--pink); z-index:3; filter:drop-shadow(0 2px 0 var(--line))}
+.wheelwrap canvas{display:block; width:100%; height:auto; border-radius:50%; border:3px solid var(--line); transition:transform 4.6s cubic-bezier(.12,.7,.1,1)}
+.btn:disabled{opacity:.7; cursor:default}
 @media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
 </style>
 </head>
@@ -108,7 +112,7 @@ input[type=range]{width:100%; accent-color:var(--pink); height:34px; margin:8px 
   <section class="card" id="intro">
     <div class="emoji-big">🎈</div>
     <h1>Halo, <span id="nama"></span>!</h1>
-    <p>Ada kado kecil yang menunggumu. Tapi ada syaratnya: jawab dulu beberapa pertanyaan ya. Tenang, kalau salah boleh coba lagi.</p>
+    <p>Ada kado kecil buat kamu. Tapi ada syaratnya: jawab dulu beberapa pertanyaan ya. Tenang, kalau salah boleh coba lagi.</p>
     <button class="btn" id="mulai">Aku siap!</button>
   </section>
 
@@ -134,6 +138,14 @@ input[type=range]{width:100%; accent-color:var(--pink); height:34px; margin:8px 
     </div>
   </section>
 
+  <section class="card hide" id="loading">
+    <div class="emoji-big">💾</div>
+    <h2 id="lt">Download kenangan kita...</h2>
+    <div class="bar"><i id="lbar"></i></div>
+    <div class="count" id="lpct">0%</div>
+    <p id="lmsg" aria-live="polite"></p>
+  </section>
+
   <section class="card hide" id="final">
     <div class="emoji-big">🎂</div>
     <h1>Selamat ulang tahun, <span id="nama2"></span>!</h1>
@@ -141,7 +153,7 @@ input[type=range]{width:100%; accent-color:var(--pink); height:34px; margin:8px 
     <div id="after" class="hide">
       <p class="hari">Sudah <strong id="hari"></strong> hari kita menikah, still counting, dan KAMU masih jatuh cinta sama AKU. Haha.</p>
       <div class="voucher reveal">
-        <small>VOUCHER BELANJA</small>
+        <small>VOUCHER JAJAN</small>
         <div class="scratch"><b>Rp500.000</b><canvas id="sc" aria-label="Kartu gosok"></canvas></div>
         <span id="petunjuk">Gosok kartunya pakai jari</span>
       </div>
@@ -150,11 +162,14 @@ input[type=range]{width:100%; accent-color:var(--pink); height:34px; margin:8px 
         <small>KODE VOUCHER</small>
         <strong id="kode"></strong>
         <span id="terbit"></span>
-        <span>Screenshot layar ini dan tunjukkan padaku</span>
+        <span>Screenshot layar ini dan tunjukkan pada suamimu</span>
       </div>
       <div id="kupon" class="hide">
-        <h2>Bonus kupon, ketuk untuk memakai</h2>
+        <h2>Putar roda bonus!</h2>
+        <div class="wheelwrap"><canvas id="roda" width="560" height="560" aria-label="Roda kupon"></canvas></div>
+        <button class="btn" id="putar">Putar!</button>
         <div id="kuponList"></div>
+        <p id="kuponInfo"></p>
       </div>
       <p style="margin-top:14px"><strong id="dari"></strong></p>
     </div>
@@ -172,44 +187,51 @@ var CONFIG = {
   sandi: "sat set sot",
   nikah: [2024, 7, 1],
   kode: "SAYANG-500K",
-  kupon: ["1x Bebas cuci piring", "1x Pijat 15 menit sampai ketiduran", "1x Kamu pilih tempat makan, aku tidak boleh protes", "1x Peluk tanpa alasan"],
+  roda: [
+    { s: "Cuci piring", t: "1x Bebas cuci piring" },
+    { s: "Pijat", t: "1x Pijat 15 menit sampai ketiduran" },
+    { s: "Pilih makan", t: "1x Kamu pilih tempat makan, aku tidak boleh protes" },
+    { s: "Peluk", t: "1x Peluk tanpa alasan" },
+    { s: "Peluk lama", t: "1x Peluk 10 menit, dilarang kabur" },
+    { s: "Minta bebas", t: "1x Boleh minta apa saja (syarat dan ketentuan berlaku)" }
+  ],
   soal: [
     { q: "Siapa orang yang paling kamu sayang sedunia?",
-      o: ["Tetangga sebelah", "Suamimu", "Kucing oranye di jalan", "Kurir paket"], a: 1,
-      ok: "Betul! Jawaban paling gampang sedunia", no: "Hmm, coba pikir lagi, jawabannya dekat sekali!" },
+      o: ["Gib**", "Suamimu", "Pra***", "Abang Paket"], a: 1,
+      ok: "Betul! Jawaban paling gampang sedunia.", no: "Hmm, masa iya sih." },
     { t: "run", q: "Apakah suamimu orang paling baik sedunia?", ya: "Ya, betul!", tidak: "Tidak",
       ok: "Jawaban yang sangat bijaksana",
-      goda: ["Eits, tombol Tidak malu-malu!", "Dia kabur lagi", "Susah ya dipencet? Pencet Ya saja!", "Tombol itu alergi disentuh!"] },
+      goda: ["Eits, tombolnya malu-malu!", "Dia kabur lagi", "Susah ya dipencet? Pencet Ya aja!", "Ipiiin lari ipiiin!"] },
     { q: "Hari apa kita menikah?",
-      o: ["Sabtu", "Senin", "Minggu", "Jumat"], a: 1,
-      ok: "Tepat! Senin, 1 Juli 2024, APA ITU MENIKAH WEEKEND!!", no: "Yakali nikah wiken..." },
+      o: ["Sabtu", "Senin", "Minggu", "Bukan Senin"], a: 1,
+      ok: "Yak Benar! Senin, 1 Juli 2024, APA ITU MENIKAH WEEKEND!!", no: "Yakali nikah wiken..." },
     { q: "Kalau kamu lagi marah, obat paling manjur adalah...",
-      o: ["Disuruh diet", "Dikasih tugas tambahan", "Dibiarkan lapar", "Dipeluk"], a: 3,
+      o: ["Disuruh diet", "Dikasih kerjaan tambahan", "Dibiarkan lapar", "Dipeluk"], a: 3,
       ok: "Benar! Peluk selalu menang", no: "Aduh, itu malah bikin tambah marah. Coba lagi!" },
-    { q: "Tebak kenangan kita: 🎸🎤🔥 satu kali sebelum menikah, satu kali lagi sesudah menikah",
-      o: ["Jual-beli gitar", "Bakar Gitar dan Mic", "Nonton konser ONE OK ROCK, dua kali!"], a: 2,
-      ok: "Betul! ONE OK ROCK, sebelum dan sesudah menikah", no: "Bukan itu. Coba lagi, ini kenangan yang kita teriakkan bareng!" },
+    { q: "Tebak ini emot apa: 🎸🎤🔥.",
+      o: ["Jual-beli gitar", "Bakar Gitar dan Mic", "Nonton ONE OK ROCK, dua kali!"], a: 2,
+      ok: "Yes! ONE OK ROCK dua kali, sebelum nikah sama sesudah menikah", no: "Bukan itu. Coba lagi, ini kenangan yang kita teriakin bareng!" },
     { q: "Kegiatan favoritmu yang paling bikin bahagia?",
       o: ["Lembur kerjaan", "Cuci piring", "Cuci baju", "Jajan!!"], a: 3,
-      ok: "Nah, ini dia petunjuk besar buat kadonya, tapi lanjut ke pertanyaan berikutnya ya.", no: "Yakin? Coba tebak lagi, ada yang paling seru!" },
+      ok: "Nah, ini dia petunjuk besar buat kadonya, tapi lanjut ke pertanyaan berikutnya dulu ya.", no: "Yakin? Coba tebak lagi, ada yang paling seru!" },
     { q: "Berapa jumlah pria yang lebih ganteng dari suamimu?",
       o: ["Banyak banget", "Satu RT", "Rahasia negara", "NOL, tidak ada!"], a: 3,
       ok: "Jawaban paling bijaksana sepanjang masa", no: "Salah! Jawabannya harus bikin suamimu senang" },
     { q: "Kalau lapar jam 12 malam, kamu biasanya...",
       o: ["Marah-marah", "Buka kulkas tiap 10 menit", "Bangunin suami minta dibeliin", "Semua benar"], a: 3,
-      ok: "Ketauan! Semuanya benar", no: "Kurang lengkap. Ada jawaban yang paling bener!" },
+      ok: "Ketauan deh! Semuanya benar", no: "Kurang lengkap. Ada jawaban yang paling bener!" },
     { q: "Siapa yang selalu benar di rumah ini?",
       o: ["suamiku dong", "SAYA!"], a: 1,
       ok: "Betul banget. Suamimu cuma ikut-ikut aja", no: "Yakin? Mau diganti gak?" },
     { q: "Kalau jadi superhero, kekuatanmu apa?",
-      o: ["Terbang", "Bisa jajan gatakut gendut", "Tidur tapi kerjaan kelar.", "Menghilang pas disuruh nyuci piring"], a: 1,
-      ok: "Tepat! itukan cita-cita mu.", no: "Keren sih, tapi kayaknya bukan itu deh. Coba lagi!" },
-    { t: "slider", q: "Seberapa sayang kamu sama suamimu? Geser ya!",
+      o: ["Terbang", "Bisa jajan gatakut gendats", "Tidur tapi kerjaan kelar.", "Menghilang pas disuruh nyuci piring"], a: 1,
+      ok: "Yak benar! itukan cita-cita mu.", no: "Keren sih, tapi kayaknya bukan itu deh. Coba lagi!" },
+    { t: "slider", q: "Sebelum pilih-pilih hadiah. Jawab dulu, seberapa sayang kamu sama suamimu? Geser ya!",
       t1: "Hmm, serius segitu?", t2: "Masa cuma segitu? Geser lagi!", t3: "Dikit lagi, geser terus!",
       ok: "Duar!! Sampai bisa infinity gitu! Aku juga sayang kamu kok :)" },
-    { t: "any", q: "Hadiah apa yang paling kamu mau dari suamimu hari ini?",
+    { t: "any", q: "Oke. Hadiah apa yang paling kamu mau dari suamimu hari ini? Pilih bener-bener.",
       o: ["Dipijat sampai ketiduran", "Makan enak tanpa mikir harga", "Rebahan seharian tanpa diganggu", "Voucher Jajan"],
-      fb: ["Wah, kebetulan banget. Semua jawaban benar!", "Siap, nanti dicicil ya! Semua jawaban benar!", "Dikabulkan, ayo pilih menunya! Semua jawaban benar!", "Disetujui, tidak ada yang mengganggu! Semua jawaban benar!"] }
+      fb: ["Wah, kebetulan banget. Semua jawaban benar!", "Siap, nanti dicicil ya! Semua jawaban benar!", "Dikabulkan! Semua jawaban benar!", "Disetujui! Semua jawaban benar!"] }
   ]
 };
 /* ============================================== */
@@ -220,7 +242,7 @@ $("nama").textContent = CONFIG.nama; $("nama2").textContent = CONFIG.nama;
 $("ucapan").textContent = CONFIG.ucapan; $("dari").textContent = CONFIG.dari;
 
 function show(id){
-  ["intro","quiz","giftbox","final"].forEach(function(s){ $(s).classList.add("hide") });
+  ["intro","quiz","giftbox","loading","final"].forEach(function(s){ $(s).classList.add("hide") });
   $(id).classList.remove("hide"); $(id).classList.add("reveal");
 }
 
@@ -319,6 +341,49 @@ function initScratch(){
   c.onpointermove = function(e){ if(!down) return; var p = pos(e); line(last,p); last = p };
   c.onpointerup = c.onpointercancel = function(){ down = false; cek() };
 }
+function fakeLoad(){
+  show("loading");
+  var bar=$("lbar"), pct=$("lpct"), msg=$("lmsg"), p=0;
+  bar.style.background=""; bar.style.width="0"; pct.textContent="0%"; msg.textContent=""; $("lt").textContent="Mengunduh kenangan kita...";
+  var iv=setInterval(function(){
+    p += p<87 ? 3+Math.random()*4 : 1;
+    if(p>=99){
+      clearInterval(iv); bar.style.width="99%"; pct.textContent="99%"; msg.textContent="Hmm, kok macet ya...";
+      setTimeout(function(){
+        bar.style.background="var(--pink)"; $("lt").textContent="Gagal mengunduh!";
+        msg.textContent="Kenangan kita terlalu banyak, penyimpanan penuh."; burst(40);
+        setTimeout(function(){ show("final"); startFinal(); burst(220); setTimeout(function(){burst(160)},900); },2400);
+      },1800);
+      return;
+    }
+    bar.style.width=p+"%"; pct.textContent=Math.floor(p)+"%";
+  },120);
+}
+function initRoda(){
+  var c=$("roda"), x=c.getContext("2d"), n=CONFIG.roda.length, a=2*Math.PI/n, R=280;
+  var cols=["#ff5c9d","#ffc928","#3fb6ff","#2fd6a0","#ff8a3d","#b07cff"];
+  x.clearRect(0,0,560,560);
+  CONFIG.roda.forEach(function(it,k){
+    x.beginPath(); x.moveTo(R,R); x.arc(R,R,R-4,-Math.PI/2+k*a,-Math.PI/2+(k+1)*a); x.closePath();
+    x.fillStyle=cols[k%cols.length]; x.fill(); x.lineWidth=5; x.strokeStyle="#3a2350"; x.stroke();
+    x.save(); x.translate(R,R); x.rotate(-Math.PI/2+(k+.5)*a); x.textAlign="right"; x.textBaseline="middle";
+    x.fillStyle="#3a2350"; x.font="800 28px Nunito,sans-serif"; x.fillText(it.s,R-34,0); x.restore();
+  });
+  x.beginPath(); x.arc(R,R,34,0,2*Math.PI); x.fillStyle="#fff"; x.fill(); x.lineWidth=5; x.strokeStyle="#3a2350"; x.stroke();
+  c.style.transition="none"; c.style.transform="rotate(0deg)"; void c.offsetWidth; c.style.transition="";
+  $("putar").disabled=false; $("putar").textContent="Putar!"; $("kuponList").innerHTML=""; $("kuponInfo").textContent="";
+}
+$("putar").onclick=function(){
+  var b=$("putar"); b.disabled=true; b.textContent="Berputar...";
+  var n=CONFIG.roda.length, a=360/n, k=Math.floor(Math.random()*n), jit=(Math.random()-.5)*a*.6;
+  $("roda").style.transform="rotate("+(360*6-(k+.5)*a+jit)+"deg)";
+  setTimeout(function(){
+    var d=document.createElement("button"); d.className="tiket"; d.textContent="Kamu dapat: "+CONFIG.roda[k].t;
+    d.onclick=function(){ d.classList.toggle("used") }; $("kuponList").appendChild(d);
+    $("kuponInfo").textContent="Ketuk kupon untuk memakainya. Jangan lupa screenshot!";
+    b.textContent="Sudah diklaim"; burst(120);
+  },4800);
+};
 function startFinal(){
   ["after","klaim","kodebox","kupon"].forEach(function(id){ $(id).classList.add("hide") });
   var sc = $("sc"); sc.style.opacity = 1; sc.style.pointerEvents = "auto"; $("petunjuk").textContent = "Gosok kartunya pakai jari ✨";
@@ -331,11 +396,7 @@ $("klaim").onclick = function(){
   $("klaim").classList.add("hide"); $("kode").textContent = CONFIG.kode;
   $("terbit").textContent = "Diterbitkan " + new Date().toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"}) + ", berlaku sampai puas belanja";
   $("kodebox").classList.remove("hide");
-  var L = $("kuponList"); L.innerHTML = "";
-  CONFIG.kupon.forEach(function(k){
-    var d = document.createElement("button"); d.className = "tiket"; d.textContent = "🎟️ " + k;
-    d.onclick = function(){ d.classList.toggle("used") }; L.appendChild(d);
-  });
+  initRoda();
   $("kupon").classList.remove("hide"); burst(80);
 };
 $("mulai").onclick = function(){ show("quiz"); render() };
@@ -360,7 +421,7 @@ function cekSandi(){
   var v = $("sandi").value.toLowerCase().replace(/\s+/g," ").trim();
   if(v === CONFIG.sandi){
     $("mantra").classList.add("hide"); $("taps").textContent = "Mantra diterima! ✨"; $("gift").classList.add("open");
-    setTimeout(function(){ show("final"); startFinal(); burst(220); setTimeout(function(){burst(160)},900); },500);
+    setTimeout(fakeLoad,500);
   } else {
     $("salah").textContent = "Mantranya belum pas, kakak. Coba lagi ya!";
     var m = $("mantra"); m.classList.remove("shake"); void m.offsetWidth; m.classList.add("shake");
